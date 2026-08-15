@@ -1,6 +1,13 @@
 {
     "manifest_version": 3,
     "name": "RateMyRegistration",
-    "version":"0.1.0",
-    "description": "Shows RateMyProfessor ratings inline during course registration"
+    "version": "0.1.0",
+    "description": "Shows RateMyProfessor ratings inline during course registration",
+    "content_scripts": [
+        {
+            "matches": ["https://www.google.com/*"],
+            "js": ["content-scripts/inject.js"],
+            "run_at": "document_idle"
+        }
+    ]
 }
