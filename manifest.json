@@ -3,9 +3,17 @@
     "name": "RateMyRegistration",
     "version": "0.1.0",
     "description": "Shows RateMyProfessor ratings inline during course registration",
+    "permissions": ["storage"],
+    "host_permissions": [
+        "https://athena.uga.edu/*",
+        "https://www.ratemyprofessors.com/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
     "content_scripts": [
         {
-            "matches": ["https://www.google.com/*"],
+            "matches": ["https://athena.uga.edu/*"],
             "js": ["content-scripts/inject.js"],
             "run_at": "document_idle"
         }
