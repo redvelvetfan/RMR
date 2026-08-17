@@ -1,8 +1,4 @@
-// RMP school ID for University of Georgia.
-// Verify: visit https://www.ratemyprofessors.com/school/1139 — if it's UGA, this is correct.
-// To find the right ID: open RMP, search for your school, inspect the URL.
-// Then encode: btoa("School-<numericId>")
-const UGA_SCHOOL_ID = "U2Nob29sLTExMzk="; // School-1139
+const UGA_SCHOOL_ID = "U2Nob29sLTExMDE="; // btoa("School-1101") — University of Georgia
 
 const RMP_GQL = "https://www.ratemyprofessors.com/graphql";
 
