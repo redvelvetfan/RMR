@@ -1,55 +1,79 @@
-// DOM Inspector — run on Athena, report console output so we can build the real selectors
-console.log("[RMR] content script loaded on", window.location.href);
-
-const NAME_LIKE = /^[A-Z][a-z]+([ \-][A-Z][a-z]+)+$/;
-
-function getSelector(el) {
-    if (el.id) return `#${el.id}`;
-    const parts = [];
-    while (el && el.nodeType === Node.ELEMENT_NODE) {
-        let seg = el.tagName.toLowerCase();
-        if (el.id) { seg += `#${el.id}`; parts.unshift(seg); break; }
-        if (el.className) seg += "." + [...el.classList].join(".");
-        parts.unshift(seg);
-        el = el.parentElement;
+const STYLE = `
+    .rmr-badge {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: bold;
+        vertical-align: middle;
+        cursor: default;
+        font-family: sans-serif;
     }
-    return parts.join(" > ");
+    .rmr-loading { background: #ddd; color: #888; }
+    .rmr-rated   { background: #1a73e8; color: #fff; }
+    .rmr-none    { background: #eee; color: #aaa; }
+`;
+
+(function injectStyles() {
+    const el = document.createElement("style");
+    el.textContent = STYLE;
+    document.head.appendChild(el);
+})();
+
+function updateBadge(badge, data) {
+    badge.classList.remove("rmr-loading");
+    if (!data || data.avgRating == null) {
+        badge.className = "rmr-badge rmr-none";
+        badge.textContent = "N/A";
+        return;
+    }
+    badge.className = "rmr-badge rmr-rated";
+    badge.textContent = `⭐ ${data.avgRating.toFixed(1)}`;
+    const again = data.wouldTakeAgainPercent != null
+        ? `${Math.round(data.wouldTakeAgainPercent)}%` : "?";
+    const diff = data.avgDifficulty != null
+        ? data.avgDifficulty.toFixed(1) : "?";
+    badge.title = `${data.numRatings} rating${data.numRatings !== 1 ? "s" : ""} · Difficulty: ${diff} · Would take again: ${again}`;
 }
 
-function inspectNode(root) {
-    // Look for elements whose class/id hints at instructor data
-    const hintRe = /instructor|faculty|professor|teacher|staff/i;
-    root.querySelectorAll("*").forEach(el => {
-        if (hintRe.test(el.className) || hintRe.test(el.id)) {
-            console.log("[RMR] hint-element:", getSelector(el), "| text:", el.textContent.trim().slice(0, 120));
-        }
+function processRow(tr) {
+    if (tr.dataset.rmrDone) return;
+    const link = tr.querySelector("a.email");
+    if (!link) return;
+
+    const name = link.textContent.trim();
+    if (!name) return;
+
+    tr.dataset.rmrDone = "1";
+
+    const badge = document.createElement("span");
+    badge.className = "rmr-badge rmr-loading";
+    badge.textContent = "…";
+    link.insertAdjacentElement("afterend", badge);
+
+    chrome.runtime.sendMessage({ type: "LOOKUP_PROF", name }, (resp) => {
+        if (chrome.runtime.lastError) return;
+        updateBadge(badge, resp);
     });
-
-    // Walk every text node looking for name-shaped strings
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    let node;
-    while ((node = walker.nextNode())) {
-        const text = node.textContent.trim();
-        if (NAME_LIKE.test(text)) {
-            console.log("[RMR] name-candidate:", JSON.stringify(text), "| parent:", getSelector(node.parentElement));
-        }
-    }
 }
 
-// Run on current DOM
-inspectNode(document.body);
+function scanNode(root) {
+    if (root.matches?.("tr") && root.closest("table#table1")) {
+        processRow(root);
+        return;
+    }
+    root.querySelectorAll?.("table#table1 tbody tr").forEach(processRow);
+}
 
-// Watch for dynamically loaded content (SPA navigation, Ajax table updates)
-const observer = new MutationObserver(mutations => {
+// Initial pass
+document.querySelectorAll("table#table1 tbody tr").forEach(processRow);
+
+// Watch for AJAX-loaded rows and table re-renders
+new MutationObserver((mutations) => {
     for (const m of mutations) {
         for (const node of m.addedNodes) {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-                console.log("[RMR] DOM mutation — new node:", getSelector(node), "| text:", node.textContent.trim().slice(0, 80));
-                inspectNode(node);
-            }
+            if (node.nodeType === Node.ELEMENT_NODE) scanNode(node);
         }
     }
-});
-
-observer.observe(document.body, { childList: true, subtree: true });
-console.log("[RMR] MutationObserver watching for dynamic content");
+}).observe(document.body, { childList: true, subtree: true });
