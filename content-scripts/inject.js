@@ -1,34 +1,28 @@
-const STYLE = `
-    .rmr-badge {
-        display: inline-block;
-        margin-left: 6px;
-        padding: 1px 6px;
-        border-radius: 3px;
-        font-size: 11px;
-        font-weight: bold;
-        vertical-align: middle;
-        cursor: default;
-        font-family: sans-serif;
-    }
-    .rmr-loading { background: #ddd; color: #888; }
-    .rmr-rated   { background: #1a73e8; color: #fff; }
-    .rmr-none    { background: #eee; color: #aaa; }
-`;
+const BASE_STYLE = [
+    "display:inline-block",
+    "margin-left:6px",
+    "padding:1px 6px",
+    "border-radius:3px",
+    "font-size:11px",
+    "font-weight:bold",
+    "vertical-align:middle",
+    "cursor:default",
+    "font-family:sans-serif",
+    "line-height:1.4",
+].join(";");
 
-(function injectStyles() {
-    const el = document.createElement("style");
-    el.textContent = STYLE;
-    document.head.appendChild(el);
-})();
+const STYLE_LOADING = `${BASE_STYLE};background:#ddd;color:#666`;
+const STYLE_RATED   = `${BASE_STYLE};background:#1a73e8;color:#fff`;
+const STYLE_NONE    = `${BASE_STYLE};background:#eee;color:#aaa`;
 
 function updateBadge(badge, data) {
-    badge.classList.remove("rmr-loading");
+    if (!badge.isConnected) return;
     if (!data || data.avgRating == null) {
-        badge.className = "rmr-badge rmr-none";
+        badge.style.cssText = STYLE_NONE;
         badge.textContent = "N/A";
         return;
     }
-    badge.className = "rmr-badge rmr-rated";
+    badge.style.cssText = STYLE_RATED;
     badge.textContent = `⭐ ${data.avgRating.toFixed(1)}`;
     const again = data.wouldTakeAgainPercent != null
         ? `${Math.round(data.wouldTakeAgainPercent)}%` : "?";
@@ -47,8 +41,12 @@ function processRow(tr) {
 
     tr.dataset.rmrDone = "1";
 
+    const td = link.parentElement;
+    td.style.overflow = "visible";
+    td.style.whiteSpace = "normal";
+
     const badge = document.createElement("span");
-    badge.className = "rmr-badge rmr-loading";
+    badge.style.cssText = STYLE_LOADING;
     badge.textContent = "…";
     link.insertAdjacentElement("afterend", badge);
 
@@ -66,10 +64,8 @@ function scanNode(root) {
     root.querySelectorAll?.("table#table1 tbody tr").forEach(processRow);
 }
 
-// Initial pass
 document.querySelectorAll("table#table1 tbody tr").forEach(processRow);
 
-// Watch for AJAX-loaded rows and table re-renders
 new MutationObserver((mutations) => {
     for (const m of mutations) {
         for (const node of m.addedNodes) {
