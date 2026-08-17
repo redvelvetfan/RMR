@@ -25,26 +25,35 @@ query TeacherSearchQuery($text: String!, $schoolID: ID!) {
 const cache = new Map();
 const pending = new Map();
 
-function norm(str) {
-    return str.toLowerCase().replace(/[^a-z]/g, "");
+function normTokens(str) {
+    return str
+        .normalize("NFD").replace(/[̀-ͯ]/g, "") // strip diacritics
+        .toLowerCase()
+        .replace(/[^a-z]+/g, " ")                         // hyphens/punctuation → spaces
+        .trim().split(/\s+/)
+        .filter(t => t.length > 1);                        // drop single-letter initials
 }
 
-function firstNameMatch(a, b) {
-    const na = norm(a);
-    const nb = norm(b);
-    if (!na || !nb) return false;
-    // Allow prefix match so Brad ↔ Bradley, Chris ↔ Christopher, etc.
-    return na === nb || na.startsWith(nb) || nb.startsWith(na);
+function tokenMatch(a, b) {
+    // Exact match OR one is a prefix of the other (Brad ↔ Bradley, etc.)
+    return a === b || a.startsWith(b) || b.startsWith(a);
 }
 
 function isGoodMatch(queryName, firstName, lastName) {
-    // Drop middle initials (single letters)
-    const tokens = queryName.split(/\s+/).filter(t => norm(t).length > 1);
-    if (tokens.length < 2) return false;
-    const qFirst = tokens[0];
-    const qLast  = tokens[tokens.length - 1];
-    // Last name must be an exact match; first name allows nickname prefixes
-    return norm(qLast) === norm(lastName) && firstNameMatch(qFirst, firstName);
+    const aTokens = normTokens(queryName);
+    const rTokens = normTokens(`${firstName} ${lastName}`);
+    if (aTokens.length < 1 || rTokens.length < 1) return false;
+
+    // Fraction of RMP tokens that match any Athena token
+    const matches = rTokens.filter(rt => aTokens.some(at => tokenMatch(rt, at)));
+    const score = matches.length / rTokens.length;
+
+    // Athena's last token must appear somewhere in the RMP name
+    // (guards against purely first-name-based false positives)
+    const aLast = aTokens[aTokens.length - 1];
+    const lastNamePresent = rTokens.some(rt => tokenMatch(rt, aLast));
+
+    return score >= 0.6 && lastNamePresent;
 }
 
 function rmpUrl(encodedId) {
@@ -86,7 +95,7 @@ async function queryRMP(searchText, name) {
 }
 
 async function fetchProf(name) {
-    const tokens = name.split(/\s+/).filter(t => norm(t).length > 1);
+    const tokens = normTokens(name);
     if (tokens.length < 2) return null;
 
     // Pass 1: search by full name minus initials ("Bradley Barnes")
