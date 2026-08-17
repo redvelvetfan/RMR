@@ -53,10 +53,7 @@ function rmpUrl(encodedId) {
     return `https://www.ratemyprofessors.com/professor/${numeric}`;
 }
 
-async function fetchProf(name) {
-    // Strip initials before sending to RMP for a cleaner search
-    const searchText = name.split(/\s+/).filter(t => norm(t).length > 1).join(" ");
-
+async function queryRMP(searchText, name) {
     try {
         const res = await fetch(RMP_GQL, {
             method: "POST",
@@ -69,10 +66,8 @@ async function fetchProf(name) {
                 variables: { text: searchText, schoolID: UGA_SCHOOL_ID },
             }),
         });
-
         const json = await res.json();
         const edges = json?.data?.newSearch?.teachers?.edges ?? [];
-
         for (const { node } of edges) {
             if (isGoodMatch(name, node.firstName, node.lastName)) {
                 return {
@@ -88,6 +83,19 @@ async function fetchProf(name) {
     } catch (_) {
         return null;
     }
+}
+
+async function fetchProf(name) {
+    const tokens = name.split(/\s+/).filter(t => norm(t).length > 1);
+    if (tokens.length < 2) return null;
+
+    // Pass 1: search by full name minus initials ("Bradley Barnes")
+    const result = await queryRMP(tokens.join(" "), name);
+    if (result) return result;
+
+    // Pass 2: search by last name only so RMP returns all professors with that
+    // surname at UGA — catches nicknames like Brad ↔ Bradley that pass 1 misses
+    return queryRMP(tokens[tokens.length - 1], name);
 }
 
 async function lookupProf(name) {
