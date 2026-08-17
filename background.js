@@ -23,16 +23,26 @@ query TeacherSearchQuery($text: String!, $schoolID: ID!) {
 // Session cache — persists until service worker is evicted
 const cache = new Map();
 
+function nameTokens(str) {
+    // Drop middle initials like "G." or "G" (single letter, optionally with period)
+    return str.toLowerCase().split(/\s+/).filter(t => t.replace(".", "").length > 1);
+}
+
 function nameSimilarity(query, first, last) {
-    const qTokens = query.toLowerCase().split(/\s+/);
-    const rTokens = `${first} ${last}`.toLowerCase().split(/\s+/);
+    const qTokens = nameTokens(query);
+    const rTokens = nameTokens(`${first} ${last}`);
     const shared = qTokens.filter(t => rTokens.includes(t)).length;
     return shared / Math.max(qTokens.length, rTokens.length);
+}
+
+function stripInitials(name) {
+    return name.split(/\s+/).filter(t => t.replace(".", "").length > 1).join(" ");
 }
 
 async function lookupProf(name) {
     if (cache.has(name)) return cache.get(name);
 
+    const searchName = stripInitials(name);
     let result = null;
     try {
         const res = await fetch(RMP_GQL, {
@@ -43,7 +53,7 @@ async function lookupProf(name) {
             },
             body: JSON.stringify({
                 query: QUERY,
-                variables: { text: name, schoolID: UGA_SCHOOL_ID },
+                variables: { text: searchName, schoolID: UGA_SCHOOL_ID },
             }),
         });
 
