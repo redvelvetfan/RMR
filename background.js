@@ -8,6 +8,7 @@ query TeacherSearchQuery($text: String!, $schoolID: ID!) {
     teachers(query: {text: $text, schoolID: $schoolID}, first: 5) {
       edges {
         node {
+          id
           firstName
           lastName
           avgRating
@@ -20,30 +21,42 @@ query TeacherSearchQuery($text: String!, $schoolID: ID!) {
   }
 }`;
 
-// Session cache — persists until service worker is evicted
+// Session cache and in-flight deduplication
 const cache = new Map();
+const pending = new Map();
 
-function nameTokens(str) {
-    // Drop middle initials like "G." or "G" (single letter, optionally with period)
-    return str.toLowerCase().split(/\s+/).filter(t => t.replace(".", "").length > 1);
+function norm(str) {
+    return str.toLowerCase().replace(/[^a-z]/g, "");
 }
 
-function nameSimilarity(query, first, last) {
-    const qTokens = nameTokens(query);
-    const rTokens = nameTokens(`${first} ${last}`);
-    const shared = qTokens.filter(t => rTokens.includes(t)).length;
-    return shared / Math.max(qTokens.length, rTokens.length);
+function firstNameMatch(a, b) {
+    const na = norm(a);
+    const nb = norm(b);
+    if (!na || !nb) return false;
+    // Allow prefix match so Brad ↔ Bradley, Chris ↔ Christopher, etc.
+    return na === nb || na.startsWith(nb) || nb.startsWith(na);
 }
 
-function stripInitials(name) {
-    return name.split(/\s+/).filter(t => t.replace(".", "").length > 1).join(" ");
+function isGoodMatch(queryName, firstName, lastName) {
+    // Drop middle initials (single letters)
+    const tokens = queryName.split(/\s+/).filter(t => norm(t).length > 1);
+    if (tokens.length < 2) return false;
+    const qFirst = tokens[0];
+    const qLast  = tokens[tokens.length - 1];
+    // Last name must be an exact match; first name allows nickname prefixes
+    return norm(qLast) === norm(lastName) && firstNameMatch(qFirst, firstName);
 }
 
-async function lookupProf(name) {
-    if (cache.has(name)) return cache.get(name);
+function rmpUrl(encodedId) {
+    // RMP IDs are base64("Teacher-12345") — extract the numeric part
+    const numeric = atob(encodedId).split("-").pop();
+    return `https://www.ratemyprofessors.com/professor/${numeric}`;
+}
 
-    const searchName = stripInitials(name);
-    let result = null;
+async function fetchProf(name) {
+    // Strip initials before sending to RMP for a cleaner search
+    const searchText = name.split(/\s+/).filter(t => norm(t).length > 1).join(" ");
+
     try {
         const res = await fetch(RMP_GQL, {
             method: "POST",
@@ -53,37 +66,47 @@ async function lookupProf(name) {
             },
             body: JSON.stringify({
                 query: QUERY,
-                variables: { text: searchName, schoolID: UGA_SCHOOL_ID },
+                variables: { text: searchText, schoolID: UGA_SCHOOL_ID },
             }),
         });
 
         const json = await res.json();
         const edges = json?.data?.newSearch?.teachers?.edges ?? [];
 
-        // Pick the best-matching result — require at least one shared name token
         for (const { node } of edges) {
-            if (nameSimilarity(name, node.firstName, node.lastName) >= 0.4) {
-                result = {
+            if (isGoodMatch(name, node.firstName, node.lastName)) {
+                return {
                     avgRating: node.avgRating,
                     avgDifficulty: node.avgDifficulty,
                     numRatings: node.numRatings,
                     wouldTakeAgainPercent: node.wouldTakeAgainPercent,
+                    url: rmpUrl(node.id),
                 };
-                break;
             }
         }
+        return null;
     } catch (_) {
-        // Network error — don't cache so a retry can succeed
         return null;
     }
+}
 
-    cache.set(name, result);
-    return result;
+async function lookupProf(name) {
+    if (cache.has(name)) return cache.get(name);
+    // Deduplicate concurrent requests for the same name
+    if (pending.has(name)) return pending.get(name);
+
+    const promise = fetchProf(name).then(result => {
+        cache.set(name, result);
+        pending.delete(name);
+        return result;
+    });
+    pending.set(name, promise);
+    return promise;
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === "LOOKUP_PROF") {
         lookupProf(msg.name).then(sendResponse);
-        return true; // keep message channel open for async response
+        return true;
     }
 });

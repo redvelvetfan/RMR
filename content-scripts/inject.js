@@ -22,8 +22,13 @@ function updateBadge(badge, data) {
         badge.textContent = "N/A";
         return;
     }
-    badge.style.cssText = STYLE_RATED;
+    badge.style.cssText = STYLE_RATED + ";text-decoration:none";
     badge.textContent = `⭐ ${data.avgRating.toFixed(1)}`;
+    if (data.url) {
+        badge.href = data.url;
+        badge.target = "_blank";
+        badge.rel = "noopener noreferrer";
+    }
     const again = data.wouldTakeAgainPercent != null
         ? `${Math.round(data.wouldTakeAgainPercent)}%` : "?";
     const diff = data.avgDifficulty != null
@@ -45,7 +50,7 @@ function processRow(tr) {
     td.style.overflow = "visible";
     td.style.whiteSpace = "normal";
 
-    const badge = document.createElement("span");
+    const badge = document.createElement("a");
     badge.style.cssText = STYLE_LOADING;
     badge.textContent = "…";
     link.insertAdjacentElement("afterend", badge);
