@@ -55,9 +55,15 @@ function processRow(tr) {
     badge.textContent = "…";
     link.insertAdjacentElement("afterend", badge);
 
-    chrome.runtime.sendMessage({ type: "LOOKUP_PROF", name })
-        .then(resp => updateBadge(badge, resp))
-        .catch(() => {}); // service worker unavailable — badge stays as loading
+    // chrome.runtime.id is undefined when the extension is reloaded mid-session
+    if (!chrome.runtime?.id) return;
+    try {
+        chrome.runtime.sendMessage({ type: "LOOKUP_PROF", name })
+            .then(resp => updateBadge(badge, resp))
+            .catch(() => {});
+    } catch (_) {
+        // Extension context invalidated (reloaded while tab was open)
+    }
 }
 
 function scanNode(root) {
