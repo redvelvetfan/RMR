@@ -55,10 +55,9 @@ function processRow(tr) {
     badge.textContent = "…";
     link.insertAdjacentElement("afterend", badge);
 
-    chrome.runtime.sendMessage({ type: "LOOKUP_PROF", name }, (resp) => {
-        if (chrome.runtime.lastError) return;
-        updateBadge(badge, resp);
-    });
+    chrome.runtime.sendMessage({ type: "LOOKUP_PROF", name })
+        .then(resp => updateBadge(badge, resp))
+        .catch(() => {}); // service worker unavailable — badge stays as loading
 }
 
 function scanNode(root) {
