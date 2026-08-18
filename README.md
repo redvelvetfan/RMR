@@ -11,7 +11,7 @@ A Chrome extension that shows RateMyProfessors ratings inline on UGA's Athena co
 - Session cache deduplicates API calls so the same professor is only looked up once
 
 ## Feedback Form:
-[text](https://forms.gle/pVJyYN8BbK6LX1nX7)
+[RMR Feedback Form](https://forms.gle/pVJyYN8BbK6LX1nX7)
 
 ## Installation
 
