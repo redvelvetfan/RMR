@@ -10,6 +10,9 @@ A Chrome extension that shows RateMyProfessors ratings inline on UGA's Athena co
 - Two-pass search: tries full name first, falls back to last name to catch nickname variants
 - Session cache deduplicates API calls so the same professor is only looked up once
 
+## Feedback Form:
+[text](https://forms.gle/pVJyYN8BbK6LX1nX7)
+
 ## Installation
 
 This extension is not yet on the Chrome Web Store. To install manually:
